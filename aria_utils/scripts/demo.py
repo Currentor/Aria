@@ -1,105 +1,100 @@
 #!/usr/bin/env python
-import webcommands as c
+import aria
 import rospy
-import math
 import subprocess
+import sys
+import thread
 import time
 from std_msgs.msg import String
 
 class Demo:
     demo = {}
-    brk = False
-    id_map = rospy.get_param("/id_map")
-    pid_gain = rospy.get_param("/pid_gain")
-    c.shscript = rospy.get_param("/sh_script")
-    rev_id_map = {}
+    brkflag = False
     def __init__(self):
-        #self.demo['demo_test'] = self.demo_test
-        self.demo['table_wipe'] = self.table_wipe_gravity
-        for i in range(0, len(self.id_map)):
-            for key, value in self.id_map.iteritems():
-                if value == i:
-                    self.rev_id_map[i] = key
-                    break
-    def tryq(self, msg="retry? y or n   "):
+        self.demo['thread_test'] = self.thread_test
+        self.demo['reset'] = self.reset
+        self.demo['idle'] = self.idle
+        self.demo['idle_baseline'] = self.idle_baseline
+        self.demo['pad_back'] = self.pad_back
+        self.demo['table_wipe'] = self.table_wipe
+    def tryq(self, msg="press enter to continue, q to exit   "):
         response = raw_input(msg)
-        if response == 'y':
+        if response == 'q':
             return True
         return False
-    def exitq(self):
-        if self.brk:
-            rospy.logwarn('interrupted and quiting')
-            self.brk = False
-            return True
-        return False
-    def set_pid_gain(joint, p=0.0, i=0.0, d=0.0):
-        c.set_pid_gain(joint, p, i, d)
-        time.sleep(0.1)
-    def set_position(joint, goal, t=3.0):
-        c.set_time(t)
-        time.sleep(0.1)
-        c.set_position(goal)
-        time.sleep(t)
-    def set_torque(joint, goal, t=3.0):
-        c.set_time(t)
-        time.sleep(0.1)
-        c.set_torque(goal)
-        time.sleep(t)
-    def set_control_mode(joint, mode):
-        c.set_control_mode(joint, mode)
-        time.sleep(0.1)
-    def table_wipe_gravity(self):
+    def threadq(self, msg="enter q to break   "):
+        response = raw_input(msg)
+        if response == 'q':
+            self.brkflag = True
+    def reset(self):
+        subprocess.check_output(['rosrun','aria_utils','reset.py'])
+    def thread_test(self):
+        rospy.loginfo('starting test')
+        thread.start_new_thread(self.threadq, ())
+        while 1:
+            if self.brkflag:
+                self.brkflag = False
+                break
+        rospy.loginfo('ending test')
+    def table_wipe(self):
         rospy.loginfo('starting demo')
-        if not self.tryq("have you initiated aria? y or n   "):
-            rospy.logwarn('demo failed')
-            return
-        self.set_position(20, -math.pi/6)
-        rospy.loginfo('moving torso')
-        while self.tryq():
-            self.set_position(20, -math.pi/6)
-        self.set_pid_gain(20, 10.0, 0.0 ,1.0)
-        self.set_pid_gain(18, 10.0, 0.0 ,1.0)
-        self.set_pid_gain(19, 10.0, 0.0 ,1.0)
-        self.set_position(2, math.pi/6)
-        rospy.loginfo('moving shoulder')
-        while self.tryq():
-            self.set_position(2, math.pi/6)
-        self.set_pid_gain(5, 0.0, 0.0, 10.0)
-        self.tryq("press enter once right elbow reaches table")
-        self.set_control_mode(5, 0.0)
-        self.set_position(5, 0.0, 0.1)
-        self.set_pid_gain(5, 1.0, 0.0, 1.0)
-        self.set_control_mode(5, 3.0)
-        rospy.loginfo('right elbow in gravity control')
-        self.set_pid_gain(7, 0.2, 0.0, 1.0)
-        rospy.loginfo('right wrist lowered gain')
-        self.set_position(1, math.pi/3)
-        self.set_position(1, 0.0)#-math.pi/6)
-        while not self.tryq("enter y to exit   "):
-            self.set_position(1, math.pi/3)
-            self.set_position(1, 0.0)#-math.pi/6)
-        rospy.loginfo('complete')
-        while self.tryq("reset pose ?   "):
-            self.set_pid_gain(7, 1.0, 0.0, 1.0)
-            self.set_position(5, math.pi/2, 0.1)
-            self.set_position(1, 0.0, 0.1)
-            self.set_position(2, 0.0, 0.1)
-            self.set_position(20, 0.0, 0.1)
-        rospy.loginfo('ready for next demo')
-    def door_block(self):
-        rospy.loginfo('ready for next demo')     
-
-
-__demo__ = Demo()
-
-def keyboard_callback(data):
-    global __demo__
-    if __demo__.demo.has_key(data.data):
-        __demo__.demo[data.data]()
-    elif data.data == 'break':
-        __demo__.brk = True
+        if not self.tryq("initiate robot? q to skip   "):
+            rospy.logwarn('initiating')
+            self.demo['reset']()
+        if not self.tryq("initiate demo pose? q to skip   "):
+            rospy.logwarn('sending initial demo pose')
+            subprocess.check_output(['rosrun','aria_utils','table_wipe_init.py'])
+        if not self.tryq('start demo? q to skip   '):
+            rospy.logwarn('starting demo')
+            thread.start_new_thread(self.threadq, ())
+            while 1:
+                subprocess.check_output(['rosrun','aria_utils','table_wipe.py'])
+                if self.brkflag:
+                    self.brkflag = False
+                    break
+        rospy.logwarn('ending demo')
+    def pad_back(self):
+        rospy.loginfo('starting demo')
+        if not self.tryq("initiate robot? q to skip   "):
+            rospy.logwarn('initiating')
+            self.demo['reset']()
+        if not self.tryq("initiate demo pose? q to skip   "):
+            rospy.logwarn('sending initial demo pose')
+            subprocess.check_output(['rosrun','aria_utils','pad_back_init.py'])
+        if not self.tryq('start demo? q to skip   '):
+            subprocess.check_output(['rosrun','aria_utils','pad_back.py'])
+        rospy.logwarn('ending demo')
+    def idle(self):
+        rospy.loginfo('starting demo')
+        if not self.tryq("initiate robot? q to skip   "):
+            rospy.logwarn('initiating')
+            self.demo['reset']()
+        #if not self.tryq("initiate demo pose? q to skip   "):
+        #    rospy.logwarn('sending initial demo pose')
+        #    subprocess.check_output(['rosrun','aria_utils','idle_init.py'])
+        if not self.tryq('start demo? q to skip   '):
+            rospy.logwarn('starting demo')
+            subprocess.check_output(['rosrun','aria_utils','idle.py'])
+        rospy.logwarn('ending demo')
+    def idle_baseline(self):
+        rospy.loginfo('starting demo')
+        if not self.tryq("initiate robot? q to skip   "):
+            rospy.logwarn('initiating')
+            self.demo['reset']()
+        #if not self.tryq("initiate demo pose? q to skip   "):
+        #    rospy.logwarn('sending initial demo pose')
+        #    subprocess.check_output(['rosrun','aria_utils','idle_init.py'])
+        if not self.tryq('start demo? q to skip   '):
+            rospy.logwarn('starting demo')
+            subprocess.check_output(['rosrun','aria_utils','idle_baseline.py'])
+        rospy.logwarn('ending demo')
 
 if __name__ == '__main__':
     rospy.init_node('demo', anonymous=True)
-    rospy.Subscriber('/aria/commandline', String, keyboard_callback)
-    rospy.spin()
+    aria.init_publisher()
+    demo = Demo()
+    if not len(sys.argv) == 2:
+        rospy.logerr('expected an argument with demo name')
+        rospy.loginfo('\nexpected demos are:\n  reset\n  idle\n  pad_back\n  table_wipe')
+        sys.exit()
+    demo.demo[str(sys.argv[1])]()

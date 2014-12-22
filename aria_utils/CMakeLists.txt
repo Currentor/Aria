@@ -43,6 +43,8 @@ add_executable(ps3_to_web src/ps3_to_web.cc ../aria_2ndparty/src/common/ssb_comm
 
 add_executable(virtual_mcu_core src/virtual_mcu_core.cc ../aria_2ndparty/src/common/ssb_common_of.cc ../aria_2ndparty/src/common/ssb_common_vec.cc ../aria_2ndparty/src/utils/ssb_utils_model.cc ../aria_2ndparty/src/utils/ssb_utils_interpolation.cc)
 
+add_executable(virtual_force_core src/virtual_force_core.cc ../aria_2ndparty/src/common/ssb_common_of.cc ../aria_2ndparty/src/common/ssb_common_vec.cc ../aria_2ndparty/src/utils/ssb_utils_model.cc ../aria_2ndparty/src/utils/ssb_utils_interpolation.cc)
+
 add_executable(voice_to_pose src/voice_to_pose.cc ../aria_2ndparty/src/common/ssb_common_of.cc ../aria_2ndparty/src/common/ssb_common_vec.cc)
 
 target_link_libraries(ps3_to_web
@@ -50,6 +52,10 @@ target_link_libraries(ps3_to_web
 )
 
 target_link_libraries(virtual_mcu_core
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(virtual_force_core
   ${catkin_LIBRARIES}
 )
 

@@ -80,11 +80,11 @@ aria() {
 	    PROC=$!
 	    (sleep 1.0; kill $PROC)
 	elif [ $2 = "arm_free" ] ; then
-	    rostopic pub --once "/currentor_socket/request/mode_vector" std_msgs/Float32MultiArray '{data: ['0.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','2.0','2.0','2.0','2.0','2.0','2.0','1.0','1.0','0.0','0.0','0.0','0.0','0.0','0.0','0.0']}' &
+	    rostopic pub --once "/currentor_socket/request/mode_vector" std_msgs/Float32MultiArray '{data: ['0.0','3.0','3.0','3.0','3.0','3.0','2.0','3.0','3.0','3.0','3.0','3.0','3.0','2.0','3.0','2.0','2.0','2.0','2.0','2.0','2.0','1.0','1.0','0.0','0.0','0.0','0.0','0.0','0.0','0.0']}' &
 	    PROC=$!
 	    (sleep 1.0; kill $PROC)
 	elif [ $2 = "arm_exg" ] ; then
-	    rostopic pub --once "/currentor_socket/request/mode_vector" std_msgs/Float32MultiArray '{data: ['0.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','3.0','2.0','2.0','2.0','2.0','2.0','2.0','1.0','1.0','0.0','0.0','0.0','0.0','0.0','0.0','0.0']}' &
+	    rostopic pub --once "/currentor_socket/request/mode_vector" std_msgs/Float32MultiArray '{data: ['0.0','3.0','3.0','3.0','3.0','3.0','2.0','3.0','3.0','3.0','3.0','3.0','3.0','2.0','3.0','2.0','2.0','2.0','2.0','2.0','2.0','1.0','1.0','0.0','0.0','0.0','0.0','0.0','0.0','0.0']}' &
 	    PROC=$!
 	    (sleep 1.0; kill $PROC)
 	    rostopic pub --once "/currentor_socket/request/ctv_vector" std_msgs/Float32MultiArray '{data: ['0.0','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','$3','1.0','1.0','0.0','0.0','0.0','0.0','0.0','0.0','0.0']}' &
@@ -99,13 +99,18 @@ aria() {
 	    PROC=$!
 	    (sleep 1.0; kill $PROC)
 	fi
+    elif [ $1 = "load_param" ] ; then
+	rosparam load $(rospack find aria_utils)/settings/id_map.yaml /id_map
+	rosparam load $(rospack find aria_utils)/settings/initial_pose.yaml /initial_pose
+	rosparam load $(rospack find aria_utils)/settings/pid_gain.yaml /pid_gain
     else
 	if [ -z "$2" ] ; then
-	    rostopic pub --once "/aria/commandline" std_msgs/String $1 &
-	    PROC=$!
-	    (sleep 1.0; kill $PROC)
-	else
-	    rostopic echo -n1 "/aria/commandline/re/data"
+	    rosrun aria_utils initializer2.py $1
+	    #rostopic pub --once "/aria/commandline" std_msgs/String $1 &
+	    #PROC=$!
+	    #(sleep 1.0; kill $PROC)
+#	else
+#	    rostopic echo -n1 "/aria/commandline/re/data"
 	fi
     fi
 }

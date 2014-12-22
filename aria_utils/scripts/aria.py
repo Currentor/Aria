@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 import rospy
 import subprocess
+import wave
 import re
 import time
+import thread
 from std_msgs.msg import String
 from std_msgs.msg import Float32MultiArray
 
@@ -22,8 +24,9 @@ torque_vector_topic_name = '/currentor_socket/request/torque_vector'
 position_vector_topic_name = '/currentor_socket/request/position_vector'
 pid_vector_topic_name = '/currentor_socket/request/pid_vector'
 eye_topic_name = '/2ndparty/request/eye'
-gripper_topic_name = '/2ndparyt/request/gripper'
-
+gripper_topic_name = '/2ndparty/request/gripper'
+voice_topic_name = '/2ndparty/request/voice'
+anticipation_topic_name = '/addons/request/anticipation'
 
 pub_json = None
 pub_mode = None
@@ -32,6 +35,8 @@ pub_position = None
 pub_pid = None
 pub_eye = None
 pub_gripper = None
+pub_voice = None
+pub_anticipation = None
 
 def init_publisher():
     global pub_json
@@ -41,6 +46,8 @@ def init_publisher():
     global pub_pid
     global pub_eye
     global pub_gripper
+    global pub_voice
+    global pub_anticipation
     pub_json = rospy.Publisher(json_string_topic_name,
                                String, latch=True)
     pub_mode = rospy.Publisher(mode_vector_topic_name,
@@ -55,6 +62,10 @@ def init_publisher():
                               Float32MultiArray, latch=True)
     pub_gripper = rospy.Publisher(gripper_topic_name,
                                   Float32MultiArray, latch=True)
+    pub_voice = rospy.Publisher(voice_topic_name,
+                                String, latch=True)
+    pub_anticipation = rospy.Publisher(anticipation_topic_name,
+                                       Float32MultiArray, latch=False)
 
 def echo_joints(data_type):
     msg = subprocess.check_output(['rostopic','echo','-n1',
@@ -79,26 +90,37 @@ def set_feedback(fb_type):
     pub_json.publish(msg)
     time.sleep(0.1)
 
-def set_control_mode(joint, mode):
+def set_control_mode(joint, mode, sleep=True):
     msg = String()
     msg.data = '{\"method\":\"setControlMode\",\"params\":\"[%d,%f]\",\"id\":\"1\"}' % (joint, mode)
     pub_json.publish(msg)
-    time.sleep(0.1)
+    if sleep:
+        time.sleep(0.1)
     return mode
 
-def set_torque(joint, torque):
+def set_torque(joint, torque, sleep=True):
     msg = String()
     msg.data = '{\"method\":\"setTorque\",\"params\":\"[%d,%f]\",\"id\":\"1\"}' % (joint, torque)
     pub_json.publish(msg)
-    time.sleep(0.1)
+    if sleep:
+        time.sleep(0.1)
     return torque
 
-def set_position(joint, position):
+def set_position(joint, position, sleep=True):
     msg = String()
     msg.data = '{\"method\":\"setPosition\",\"params\":\"[%d,%f]\",\"id\":\"1\"}' % (joint, position)
     pub_json.publish(msg)
-    time.sleep(0.1)
+    if sleep:
+        time.sleep(0.1)
     return position
+
+def set_time(joint, t, sleep=True):
+    msg = String()
+    msg.data = '{\"method\":\"setTime\",\"params\":\"[%d,%f]\",\"id\":\"1\"}' % (joint, t)
+    pub_json.publish(msg)
+    if sleep:
+        time.sleep(0.1)
+    return t
 
 def set_control_modes(data):
     msg = Float32MultiArray()
@@ -118,45 +140,9 @@ def set_positions(data):
     pub_position.publish(msg)
     time.sleep(0.1)
 
-#def set_pid_gain(joint, p=0.0, i=0.0, d=0.0):
-#    msg = Float32MultiArray()
-#    if not type(joint) is int:
-#        msg.data = joint
-#    else:
-#        set_feedback(feedback['kp'])
-#        time.sleep(0.1)
-#        tmp = echo_joints('debug')
-#        tmp.extend([0.0]*joint_size)
-#        set_feedback(feedback['kd'])
-#        time.sleep(0.1)
-#        tmp.extend(echo_joints('debug'))
-#        msg.data = tmp
-#        msg.data[joint] *= p
-#        msg.data[joint+joint_size] *= i
-#        msg.data[joint+2*joint_size] *= d
-#    pub_pid.publish(msg)
-#    time.sleep(0.1)
-#    ret = echo_joints('debug')
-#    set_feedback(feedback['kp'])
-#    print echo_joints('debug') #kp
-#    print ret #kd
-
-
 def init_pid_gain(joint, p, i, d):
     msg = String()
     msg.data = '{\"method\":\"initPIDGain\",\"params\":\"[%d,%f,%f,%f]\",\"id\":\"1\"}' % (joint, p, i, d)
-    pub_json.publish(msg)
-    time.sleep(0.1)
-
-def x_pid_gain(joint, p, i, d):
-    msg = String()
-    set_feedback(feedback['kp'])
-    time.sleep(0.05)
-    xp = echo_joint('debug', joint)*p
-    set_feedback(feedback['kd'])
-    time.sleep(0.05)
-    xd = echo_joint('debug', joint)*d
-    msg.data = '{\"method\":\"initPIDGain\",\"params\":\"[%d,%f,%f,%f]\",\"id\":\"1\"}' % (joint, xp, i, xd)
     pub_json.publish(msg)
     time.sleep(0.1)
 
@@ -177,6 +163,94 @@ def gripper(data):
     msg.data = data
     pub_gripper.publish(msg)
     time.sleep(0.1)
+
+def voice(str_data):
+    msg = String()
+    msg.data = str_data
+    pub_voice.publish(msg)
+
+def get_voice_length(voi):
+    filename = subprocess.Popen(
+        'echo $(rospack find aria_2ndparty)/sound/voice/',
+        shell=True,
+        stdout=subprocess.PIPE)
+    filename = filename.communicate()[0]
+    filename = re.split('\n', filename)
+    filename = filename[0]
+    filename = "".join((filename, voi))
+    wf = wave.open(filename, "r")
+    t = wf.getnframes() / float(wf.getframerate())
+    return t
+
+class Anticipation:
+    rate = 100
+    force_vector = []
+    duration_count = 0
+    max_count = 0
+    play = False
+    def __init__(self):
+        thread.start_new_thread(self.main, ())
+    def setup(self, amplitude, repeats, optional=[]):
+        if repeats < 1:
+            return
+        self.force_vector = []
+        _repeats = int(repeats)
+        cur_pos = echo_joints('position')
+        tmp = [[ 4.0 for i in range(30) ] for j in range(2)]
+        if len(optional) > 0:
+            for x in range(0,29):
+                if not amplitude[x] == None:
+                    tmp[0][x] = cur_pos[x] + amplitude[x]
+                if not optional[x] == None:
+                    tmp[1][x] = cur_pos[x] + optional[x]
+            tmp[0][29] = amplitude[29]
+            tmp[1][29] = optional[29]
+        else:
+            for x in range(0,29):
+                if not amplitude[x] == None:
+                    tmp[0][x] = cur_pos[x] + amplitude[x]
+                    tmp[0][29] = amplitude[29] / _repeats
+        self.duration_count = []
+        self.max_count = _repeats
+        for y in range(0, _repeats):
+            self.force_vector += [tmp[y % 2]]
+            self.duration_count += [tmp[y % 2][29]*self.rate]
+        self.play = True
+    def main(self):
+        counter = 0
+        loop_num = 0
+        r = rospy.Rate(self.rate)
+        while not rospy.is_shutdown():
+            if self.play == True:
+                if loop_num >= self.max_count:
+                    counter = 0
+                    loop_num = 0
+                    self.play = False
+                elif counter >= self.duration_count[loop_num]:
+                    set_positions(self.force_vector[loop_num])
+                    counter = 0
+                    loop_num += 1
+                counter += 1
+                r.sleep()
+            else:
+                r.sleep()
+
+anticipator = None
+
+def init_anticipation():
+    global anticipator
+    anticipator = Anticipation()
+
+def anticipation(amplitude, repeats, optional=[]):
+    anticipator.setup(amplitude, repeats, optional)
+
+#def anticipation(amplitude, repeats, optional=[]):
+#    msg = Float32MultiArray()
+#    msg.data = amplitude
+#    msg.data += [repeats]
+#    msg.data += optional
+#    pub_anticipation.publish(msg)
+#    time.sleep(1.0)
 
 if __name__ == '__main__':
     rospy.init_node('python_webcommands')

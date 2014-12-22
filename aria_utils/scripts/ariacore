@@ -1,33 +1,18 @@
 #!/bin/bash
 ariacore() {
-    rosrun aria_utils aria get_size
-    size=$(rosrun aria_utils aria get_size ret)
+    rosrun aria_utils aria load_param
+    size=$(rosrun aria_utils initializer2.py get_size)
     echo "checking $(echo $size) joints"
-    okay=0
-    while [ 1 ]
-    do
-	rosrun aria_utils aria get_exist
-	okay=$(rosrun aria_utils aria get_exist ret)
-	if [ "$(echo $okay)" == "$(echo $size)" ]; then
-	    echo "exist ok"
-	    break
-	else
-	    echo -e "\e[1;31m$okay done with errors\e[m"
-	fi
-    done
-    okay=0
-    while [ 1 ]
-    do
-	rosrun aria_utils aria apply_gain
-	okay=$(rosrun aria_utils aria apply_gain ret)
-	if [ "$(echo $okay)" == "$(echo $size)" ]; then
-	    echo "gain ok"
-	    break
-	else
-	    echo -e "\e[1;31m$okay done with errors\e[m"
-	fi
-    done
-    okay=0
+    okay=$(rosrun aria_utils initializer2.py get_exist)
+    if [ "$(echo $okay)" == "$(echo $size)" ]; then
+	echo "exist ok"
+    else
+	echo -e "\e[1;31m$okay done with errors\e[m"
+	echo "initiation failed"
+	exit 0
+    fi
+    okay=$(rosrun aria_utils initializer2.py apply_gain)
+    echo -e "\e[1;31m$okay\e[m"
     rosrun aria_utils aria initiate
     echo "initate done"
 }

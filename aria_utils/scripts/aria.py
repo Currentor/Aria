@@ -25,7 +25,8 @@ position_vector_topic_name = '/currentor_socket/request/position_vector'
 pid_vector_topic_name = '/currentor_socket/request/pid_vector'
 eye_topic_name = '/2ndparty/request/eye'
 gripper_topic_name = '/2ndparty/request/gripper'
-voice_topic_name = '/2ndparty/request/voice'
+#voice_topic_name = '/2ndparty/request/voice'
+voice_topic_name = '/py_voice'
 anticipation_topic_name = '/addons/request/anticipation'
 
 pub_json = None
@@ -164,9 +165,11 @@ def gripper(data):
     pub_gripper.publish(msg)
     time.sleep(0.1)
 
-def voice(str_data):
+def voice(str_data, amp='1.0'):
+    dat = str_data + ', 0.0, -1, ' + amp + ', 1.0'
     msg = String()
-    msg.data = str_data
+    #msg.data = str_data
+    msg.data = dat
     pub_voice.publish(msg)
 
 def get_voice_length(voi):
@@ -251,6 +254,11 @@ def anticipation(amplitude, repeats, optional=[]):
 #    msg.data += optional
 #    pub_anticipation.publish(msg)
 #    time.sleep(1.0)
+
+def debug():
+    rospy.init_node('debug_ariapy')
+    init_publisher()
+    init_anticipation()
 
 if __name__ == '__main__':
     rospy.init_node('python_webcommands')
